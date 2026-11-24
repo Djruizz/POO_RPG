@@ -12,6 +12,7 @@ public enum RoomType {
     TREASURE("Cámara del Tesoro", "[$]", AnsiColor.BRIGHT_YELLOW),
     SHRINE("Santuario de Reposo", "[+]", AnsiColor.BRIGHT_GREEN),
     SHOP("Puesto del Mercader", "[M]", AnsiColor.BRIGHT_BLUE),
+    INSCRIPTION("Inscripción Antigua", "[~]", AnsiColor.BRIGHT_WHITE),
     BOSS("Cámara del Jefe", "[B]", AnsiColor.BRIGHT_PURPLE);
 
     private final String description;

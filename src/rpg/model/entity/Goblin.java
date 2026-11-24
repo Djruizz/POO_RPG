@@ -5,6 +5,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import rpg.model.combat.Combatant;
 import rpg.model.skill.Backstab;
 import rpg.model.skill.BasicAttack;
+import rpg.model.skill.PoisonStrike;
 import rpg.model.skill.Skill;
 
 /**
@@ -23,7 +24,7 @@ public final class Goblin extends Enemy {
         super("Goblin Saqueador", 52, 15, 6, floor, 0.25, 40, 25, false);
         this.quickAttack = new BasicAttack();
         this.ambush = new Backstab(0);
-        this.poisonBlade = new rpg.model.skill.PoisonStrike(0);
+        this.poisonBlade = new PoisonStrike(0);
         learnSkill(quickAttack);
         learnSkill(ambush);
         learnSkill(poisonBlade);

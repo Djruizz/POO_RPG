@@ -12,6 +12,7 @@ import rpg.exception.ItemNotFoundException;
 import rpg.model.combat.SkillResult;
 import rpg.model.dungeon.DungeonFloor;
 import rpg.model.dungeon.GameState;
+import rpg.model.dungeon.Room;
 import rpg.model.entity.Boss;
 import rpg.model.entity.Goblin;
 import rpg.model.entity.Mage;
@@ -22,10 +23,13 @@ import rpg.model.enums.Direction;
 import rpg.model.enums.EquipmentSlot;
 import rpg.model.enums.ItemType;
 import rpg.model.enums.Rarity;
+import rpg.model.enums.RoomType;
 import rpg.model.item.ConsumableItem;
 import rpg.model.item.EquipmentItem;
 import rpg.model.item.Inventory;
 import rpg.model.item.Item;
+import rpg.model.lore.FloorTheme;
+import rpg.model.lore.LoreFragment;
 import rpg.model.skill.BasicAttack;
 import rpg.model.skill.Fireball;
 import rpg.model.skill.Heal;
@@ -51,12 +55,13 @@ public final class DungeonCrawlerTestRunner {
         testPolymorphicCharactersAndSkills();
         testDungeonGenerationAndNavigation();
         testPersistenceSerialization();
+        testLoreThemesAndCodex();
 
-        System.out.println(">>> ¡TODAS LAS 7 PRUEBAS DE ARQUITECTURA POO PASARON EXITOSAMENTE (100%)!");
+        System.out.println(">>> ¡TODAS LAS 8 PRUEBAS DE ARQUITECTURA POO PASARON EXITOSAMENTE (100%)!");
     }
 
     private static void testEncapsulationAndHealthInvariants() {
-        System.out.print(" [1/7] Probando encapsulamiento e invariantes de salud... ");
+        System.out.print(" [1/8] Probando encapsulamiento e invariantes de salud... ");
         Warrior warrior = new Warrior("Conan");
         int max = warrior.getMaxHealth();
 
@@ -73,7 +78,7 @@ public final class DungeonCrawlerTestRunner {
     }
 
     private static void testUnmodifiableCollections() {
-        System.out.print(" [2/7] Probando inmutabilidad de colecciones expuestas... ");
+        System.out.print(" [2/8] Probando inmutabilidad de colecciones expuestas... ");
         Mage mage = new Mage("Gandalf");
 
         // Intento de mutar lista de habilidades debe lanzar UnsupportedOperationException
@@ -104,7 +109,7 @@ public final class DungeonCrawlerTestRunner {
     }
 
     private static void testInventoryAndComparableOrder() {
-        System.out.print(" [3/7] Probando ordenamiento natural Comparable<Item>... ");
+        System.out.print(" [3/8] Probando ordenamiento natural Comparable<Item>... ");
         Inventory inv = new Inventory(5);
 
         Item commonItem = new ConsumableItem("c1", "Poción Simple", "Desc", Rarity.COMMON, 10, 20, 0, false);
@@ -144,7 +149,7 @@ public final class DungeonCrawlerTestRunner {
     }
 
     private static void testCustomExceptions() {
-        System.out.print(" [4/7] Probando jerarquía de excepciones personalizadas de negocio... ");
+        System.out.print(" [4/8] Probando jerarquía de excepciones personalizadas de negocio... ");
 
         // 1. InventoryFullException
         Inventory smallInv = new Inventory(1);
@@ -189,7 +194,7 @@ public final class DungeonCrawlerTestRunner {
     }
 
     private static void testPolymorphicCharactersAndSkills() {
-        System.out.print(" [5/7] Probando combate polimórfico, subclases y estados... ");
+        System.out.print(" [5/8] Probando combate polimórfico, subclases y estados... ");
         CombatService combatService = new CombatService();
 
         Warrior warrior = new Warrior("Thor");
@@ -257,7 +262,7 @@ public final class DungeonCrawlerTestRunner {
     }
 
     private static void testDungeonGenerationAndNavigation() {
-        System.out.print(" [6/7] Probando generación procedural de mazmorra y navegación... ");
+        System.out.print(" [6/8] Probando generación procedural de mazmorra y navegación... ");
         ItemFactory itemFactory = new ItemFactory();
         DungeonGenerator generator = new DungeonGenerator(itemFactory);
         DungeonFloor floor = generator.generateFloor(1);
@@ -283,7 +288,7 @@ public final class DungeonCrawlerTestRunner {
     }
 
     private static void testPersistenceSerialization() {
-        System.out.print(" [7/7] Probando persistencia y serialización completa de GameState... ");
+        System.out.print(" [7/8] Probando persistencia y serialización completa de GameState... ");
         ItemFactory itemFactory = new ItemFactory();
         DungeonGenerator generator = new DungeonGenerator(itemFactory);
         Warrior warrior = new Warrior("Aquiles");
@@ -321,6 +326,76 @@ public final class DungeonCrawlerTestRunner {
             Files.deleteIfExists(testSaveDir);
         } catch (Exception e) {
             throw new AssertionError("Fallo al probar la serialización", e);
+        }
+
+        System.out.println("OK");
+    }
+
+    private static void testLoreThemesAndCodex() {
+        System.out.print(" [8/8] Probando temas de piso, jefes únicos y códice de historia... ");
+        DungeonGenerator generator = new DungeonGenerator(new ItemFactory());
+
+        // Cada piso tiene su propio tema y su propio jefe con diálogos
+        for (FloorTheme theme : FloorTheme.values()) {
+            int floorNumber = theme.getFloorNumber();
+            assert FloorTheme.forFloor(floorNumber) == theme : "forFloor no devolvió el tema del piso.";
+            Boss boss = new Boss(floorNumber);
+            assert boss.getName().equals(theme.getBossName()) : "El jefe no tomó el nombre de su tema.";
+            assert boss.getIntroLine() != null && boss.getDeathLine() != null : "El jefe no tiene diálogos.";
+        }
+        assert !new Boss(1).getName().equals(new Boss(2).getName()) : "Los jefes de pisos distintos se llaman igual.";
+        assert FloorTheme.forFloor(99) == FloorTheme.ABYSS_HEART : "Los pisos profundos no reutilizan el último tema.";
+
+        // Cada piso genera exactamente una sala de inscripción por fragmento de su tema, sin repetir
+        java.util.Set<LoreFragment> allPlaced = java.util.EnumSet.noneOf(LoreFragment.class);
+        for (FloorTheme theme : FloorTheme.values()) {
+            DungeonFloor floor = generator.generateFloor(theme.getFloorNumber());
+            java.util.Set<LoreFragment> placed = java.util.EnumSet.noneOf(LoreFragment.class);
+            for (int r = 0; r < floor.getRows(); r++) {
+                for (int c = 0; c < floor.getCols(); c++) {
+                    Room room = floor.getRoom(r, c);
+                    if (room.getType() == RoomType.INSCRIPTION) {
+                        assert room.getLoreFragment() != null : "Sala de inscripción sin fragmento.";
+                        assert placed.add(room.getLoreFragment()) : "Fragmento repetido en el mismo piso.";
+                    } else {
+                        assert room.getLoreFragment() == null : "Sala normal con fragmento asignado.";
+                    }
+                }
+            }
+            assert placed.equals(java.util.EnumSet.copyOf(LoreFragment.forTheme(theme)))
+                    : "El piso no contiene los fragmentos de su tema.";
+            assert floor.getRoom(0, 0).getType() == RoomType.ENTRANCE : "Una inscripción pisó la entrada.";
+            assert floor.getRoom(4, 4).getType() == RoomType.BOSS : "Una inscripción pisó la sala del jefe.";
+            assert floor.getRoom(2, 2).getType() == RoomType.SHRINE : "Una inscripción pisó el santuario.";
+            assert floor.getRoom(1, 3).getType() == RoomType.SHOP : "Una inscripción pisó al mercader.";
+            allPlaced.addAll(placed);
+        }
+        assert allPlaced.size() == LoreFragment.totalCount() : "No todos los fragmentos son alcanzables.";
+
+        // El códice no admite duplicados, es de solo lectura y sobrevive al guardado
+        GameState state = new GameState(new Rogue("Ezio"), generator.generateFloor(1));
+        assert state.discoverLore(LoreFragment.VIGIL_OATH) : "El primer hallazgo no se registró.";
+        assert !state.discoverLore(LoreFragment.VIGIL_OATH) : "El códice aceptó un fragmento duplicado.";
+        state.discoverLore(LoreFragment.FORGE_LOG);
+        try {
+            state.getDiscoveredLore().add(LoreFragment.ANVIL_MARK);
+            throw new AssertionError("Fallo: getDiscoveredLore() permitió mutación externa.");
+        } catch (UnsupportedOperationException expected) {
+            // Correcto
+        }
+
+        Path testSaveDir = Paths.get("saves_test");
+        SerializableGameRepository repo = new SerializableGameRepository(testSaveDir);
+        try {
+            repo.save(state, "test_codex");
+            GameState loaded = repo.load("test_codex");
+            assert loaded.getDiscoveredLore().equals(state.getDiscoveredLore()) : "El códice no se preservó al guardar.";
+            assert loaded.getCurrentFloor().getRoom(4, 4).getEnemy().getName()
+                    .equals(FloorTheme.CATACOMBS.getBossName()) : "El jefe no se preservó al guardar.";
+            Files.deleteIfExists(testSaveDir.resolve("test_codex.dat"));
+            Files.deleteIfExists(testSaveDir);
+        } catch (Exception e) {
+            throw new AssertionError("Fallo al probar la persistencia del códice", e);
         }
 
         System.out.println("OK");

@@ -1,7 +1,9 @@
 package rpg.ui;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import rpg.model.combat.ActiveStatusEffect;
 import rpg.model.combat.Combatant;
 import rpg.model.combat.SkillResult;
@@ -13,6 +15,8 @@ import rpg.model.enums.EquipmentSlot;
 import rpg.model.item.Equippable;
 import rpg.model.item.Inventory;
 import rpg.model.item.Item;
+import rpg.model.lore.FloorTheme;
+import rpg.model.lore.LoreFragment;
 import rpg.model.skill.Skill;
 
 /**
@@ -20,11 +24,12 @@ import rpg.model.skill.Skill;
  * inventarios, barras de estado y mapas en la consola con códigos ANSI.
  */
 public final class ConsoleView {
+    private static final int NARRATION_WIDTH = 76;
 
     public void printTitleBanner() {
         System.out.println(AnsiColor.BRIGHT_PURPLE.boldWrap("""
                 ================================================================================
-                    DUNGEON CRAWLER POO: LAS PROFUNDIDADES DEL ABISMO (JAVA 21)
+                    DUNGEON CRAWLER POO: LAS PROFUNDIDADES DEL ABISMO
                 ================================================================================
                 """));
     }
@@ -49,6 +54,7 @@ public final class ConsoleView {
 
         System.out.println(AnsiColor.BRIGHT_PURPLE.boldWrap(
                 "\n==================== [ PISO " + floor.getFloorNumber() + " / " + gameState.getMaxFloors() + " ] ===================="));
+        System.out.println(AnsiColor.PURPLE.wrap(" " + FloorTheme.forFloor(floor.getFloorNumber()).getDisplayName()));
         printPlayerHud(player);
         System.out.println();
         printMinimap(floor);
@@ -60,9 +66,10 @@ public final class ConsoleView {
         System.out.println(" 1. Desplazarse (Norte, Sur, Este, Oeste)");
         System.out.println(" 2. Gestionar Mochila y Equipamiento");
         System.out.println(" 3. Ver Ficha Completa del Personaje");
-        System.out.println(" 4. Ordenar Inventario (Comparable)");
-        System.out.println(" 5. Guardar Partida en Disco");
-        System.out.println(" 6. Regresar al Menú Principal");
+        System.out.println(" 4. Consultar Códice (" + gameState.getDiscoveredLore().size() + "/" + LoreFragment.totalCount() + " fragmentos)");
+        System.out.println(" 5. Ordenar Inventario (Comparable)");
+        System.out.println(" 6. Guardar Partida en Disco");
+        System.out.println(" 7. Regresar al Menú Principal");
     }
 
     public void printPlayerHud(Player player) {
@@ -112,7 +119,7 @@ public final class ConsoleView {
             }
             System.out.println();
         }
-        System.out.println(AnsiColor.BRIGHT_BLACK.wrap("  Leyenda: [P] Jugador | [E] Entrada | [!] Combate | [$] Tesoro | [+] Santuario | [M] Mercader | [B] Jefe | [?] Oculto"));
+        System.out.println(AnsiColor.BRIGHT_BLACK.wrap("  Leyenda: [P] Jugador | [E] Entrada | [!] Combate | [$] Tesoro | [+] Santuario | [M] Mercader | [~] Inscripción | [B] Jefe | [?] Oculto"));
     }
 
     public void printInventory(Inventory inventory) {
@@ -181,24 +188,24 @@ public final class ConsoleView {
 
     public void printSkillResult(SkillResult result) {
         StringBuilder sb = new StringBuilder();
-        sb.append(" ⚔ ").append(AnsiColor.BOLD.wrap(result.actorName()))
-          .append(" ejecuta ").append(AnsiColor.CYAN.boldWrap(result.skillName())).append(": ");
+        sb.append(" ⚔ ").append(AnsiColor.BOLD.wrap(result.getActorName()))
+          .append(" ejecuta ").append(AnsiColor.CYAN.boldWrap(result.getSkillName())).append(": ");
 
-        if (result.selfHeal()) {
-            sb.append(AnsiColor.GREEN.boldWrap("+" + result.primaryValue() + " PV restaurados."));
+        if (result.isSelfHeal()) {
+            sb.append(AnsiColor.GREEN.boldWrap("+" + result.getPrimaryValue() + " PV restaurados."));
         } else {
-            sb.append(AnsiColor.RED.boldWrap(result.primaryValue() + " de daño"))
-              .append(" sobre ").append(result.targetName()).append(".");
+            sb.append(AnsiColor.RED.boldWrap(result.getPrimaryValue() + " de daño"))
+              .append(" sobre ").append(result.getTargetName()).append(".");
         }
 
-        if (result.criticalHit()) {
+        if (result.isCriticalHit()) {
             sb.append(" ").append(AnsiColor.BRIGHT_YELLOW.boldWrap("[¡CRÍTICO!]"));
         }
-        if (result.appliedStatus() != null) {
-            sb.append(" ").append(result.appliedStatus().getColor().boldWrap("[+" + result.appliedStatus().getDisplayName() + "]"));
+        if (result.getAppliedStatus() != null) {
+            sb.append(" ").append(result.getAppliedStatus().getColor().boldWrap("[+" + result.getAppliedStatus().getDisplayName() + "]"));
         }
-        if (result.detailMessage() != null && !result.detailMessage().isBlank()) {
-            sb.append(" ").append(AnsiColor.BRIGHT_BLACK.wrap(result.detailMessage()));
+        if (result.getDetailMessage() != null && !result.getDetailMessage().isBlank()) {
+            sb.append(" ").append(AnsiColor.BRIGHT_BLACK.wrap(result.getDetailMessage()));
         }
         System.out.println(sb);
     }
@@ -212,6 +219,56 @@ public final class ConsoleView {
                     AnsiColor.BOLD.wrap(s.getName()),
                     AnsiColor.YELLOW.wrap(s.getCostDescription()),
                     s.getDescription());
+        }
+    }
+
+    /** Texto narrativo ajustado al ancho de consola, en cursiva. */
+    public void printNarration(String text) {
+        for (String line : wrapText(text, NARRATION_WIDTH)) {
+            System.out.println("  " + AnsiColor.ITALIC.wrap(line));
+        }
+    }
+
+    /** Diálogo de un personaje: nombre resaltado y su frase debajo. */
+    public void printDialogue(String speaker, String line) {
+        System.out.println("\n  " + AnsiColor.BRIGHT_PURPLE.boldWrap(speaker + ":"));
+        for (String wrapped : wrapText(line, NARRATION_WIDTH - 2)) {
+            System.out.println("    " + AnsiColor.BRIGHT_WHITE.wrap(wrapped));
+        }
+    }
+
+    public void printFloorArrival(int floorNumber) {
+        FloorTheme theme = FloorTheme.forFloor(floorNumber);
+        System.out.println(AnsiColor.BRIGHT_PURPLE.boldWrap(
+                "\n~~~~~~~~~~ PISO " + floorNumber + ": " + theme.getDisplayName().toUpperCase() + " ~~~~~~~~~~"));
+        printNarration(theme.getArrivalText());
+    }
+
+    public void printLoreFragment(LoreFragment fragment) {
+        System.out.println("\n  " + AnsiColor.BRIGHT_WHITE.boldWrap(
+                toRoman(fragment.getEntryNumber()) + ". " + fragment.getTitle()));
+        printNarration(fragment.getText());
+    }
+
+    /** Códice completo agrupado por piso; los fragmentos sin descubrir aparecen ocultos. */
+    public void printCodex(Set<LoreFragment> discovered) {
+        System.out.println(AnsiColor.BRIGHT_PURPLE.boldWrap(
+                "\n==================== CÓDICE DE LA VIGILIA (" + discovered.size() + "/"
+                        + LoreFragment.totalCount() + ") ===================="));
+        for (FloorTheme theme : FloorTheme.values()) {
+            System.out.println(AnsiColor.CYAN.boldWrap("\n--- " + theme.getDisplayName() + " ---"));
+            for (LoreFragment fragment : LoreFragment.forTheme(theme)) {
+                if (discovered.contains(fragment)) {
+                    printLoreFragment(fragment);
+                } else {
+                    System.out.println("\n  " + AnsiColor.BRIGHT_BLACK.wrap(
+                            toRoman(fragment.getEntryNumber()) + ". ??? (fragmento sin descubrir)"));
+                }
+            }
+        }
+        if (discovered.size() == LoreFragment.totalCount()) {
+            System.out.println(AnsiColor.BRIGHT_YELLOW.boldWrap(
+                    "\n  Has reunido la historia completa de Vael Aruun."));
         }
     }
 
@@ -234,6 +291,9 @@ public final class ConsoleView {
                     Tu héroe ha sucumbido a los horrores que habitan la mazmorra.
                 ================================================================================
                 """));
+        printNarration(state.getPlayer().getName() + " cae en "
+                + FloorTheme.forFloor(state.getCurrentFloor().getFloorNumber()).getDisplayName()
+                + ". La Grieta sigue abierta, y la Vigilia suma otro nombre a sus muros.");
     }
 
     public void printVictoryScreen(GameState state) {
@@ -244,6 +304,35 @@ public final class ConsoleView {
                     ¡Obtienes el título de Campeón Supremo de la Mazmorra!
                 ================================================================================
                 """));
+        printNarration("La séptima cadena se tensa por primera vez en siglos y la Grieta enmudece. "
+                + "Arriba, en las ruinas de Vael Aruun, alguien tendrá que volver a montar guardia. "
+                + state.getPlayer().getName() + " ya sabe quién.");
+        System.out.println(AnsiColor.BRIGHT_BLACK.wrap("\n  Fragmentos del códice reunidos: "
+                + state.getDiscoveredLore().size() + "/" + LoreFragment.totalCount()));
+    }
+
+    private static List<String> wrapText(String text, int width) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        for (String word : text.split(" ")) {
+            if (current.length() > 0 && current.length() + 1 + word.length() > width) {
+                lines.add(current.toString());
+                current.setLength(0);
+            }
+            if (current.length() > 0) {
+                current.append(' ');
+            }
+            current.append(word);
+        }
+        if (current.length() > 0) {
+            lines.add(current.toString());
+        }
+        return lines;
+    }
+
+    private static String toRoman(int number) {
+        String[] numerals = {"I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"};
+        return number >= 1 && number <= numerals.length ? numerals[number - 1] : String.valueOf(number);
     }
 
     private String renderBar(int current, int max, int totalBlocks, AnsiColor fill, AnsiColor empty) {

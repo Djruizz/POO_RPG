@@ -34,10 +34,6 @@ public enum AnsiColor {
         this.code = code;
     }
 
-    public String getCode() {
-        return code;
-    }
-
     public String wrap(String text) {
         return code + text + RESET.code;
     }

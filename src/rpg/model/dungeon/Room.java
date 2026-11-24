@@ -6,9 +6,10 @@ import java.util.Objects;
 import rpg.model.entity.Enemy;
 import rpg.model.enums.RoomType;
 import rpg.model.item.Item;
+import rpg.model.lore.LoreFragment;
 
 /**
- * Celda individual de la mazmorra con coordenadas, tipo de evento, enemigo o botín asociado y estado de niebla.
+ * Celda individual de la mazmorra con coordenadas, tipo de evento, enemigo, botín o fragmento de historia asociado y estado de niebla.
  */
 public final class Room implements Serializable {
     @Serial
@@ -19,6 +20,7 @@ public final class Room implements Serializable {
     private final RoomType type;
     private Enemy enemy;
     private Item loot;
+    private LoreFragment loreFragment;
     private boolean visited;
     private boolean cleared;
 
@@ -56,6 +58,14 @@ public final class Room implements Serializable {
 
     public void setLoot(Item loot) {
         this.loot = loot;
+    }
+
+    public LoreFragment getLoreFragment() {
+        return loreFragment;
+    }
+
+    public void setLoreFragment(LoreFragment loreFragment) {
+        this.loreFragment = loreFragment;
     }
 
     public boolean isVisited() {

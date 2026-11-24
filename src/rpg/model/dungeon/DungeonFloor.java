@@ -5,7 +5,6 @@ import java.io.Serializable;
 import java.util.Objects;
 import rpg.exception.InvalidActionException;
 import rpg.model.enums.Direction;
-import rpg.model.enums.RoomType;
 
 /**
  * Representa un piso completo de la mazmorra estructurado en una cuadrícula bidimensional.
@@ -63,18 +62,6 @@ public final class DungeonFloor implements Serializable {
             throw new IndexOutOfBoundsException("Coordenadas fuera de la mazmorra: (" + r + "," + c + ")");
         }
         return grid[r][c];
-    }
-
-    public boolean isBossDefeated() {
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < cols; c++) {
-                Room room = grid[r][c];
-                if (room.getType() == RoomType.BOSS) {
-                    return room.isCleared();
-                }
-            }
-        }
-        return false;
     }
 
     public int getFloorNumber() {

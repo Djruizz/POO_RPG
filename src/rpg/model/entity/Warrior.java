@@ -5,6 +5,7 @@ import rpg.exception.InvalidActionException;
 import rpg.model.combat.FuryFighter;
 import rpg.model.skill.BasicAttack;
 import rpg.model.skill.HeavyStrike;
+import rpg.model.skill.IronGuard;
 
 /**
  * Especialización de héroe: Guerrero acorazado.
@@ -22,7 +23,7 @@ public final class Warrior extends Player implements FuryFighter {
         this.fury = 20;
         learnSkill(new BasicAttack());
         learnSkill(new HeavyStrike(35));
-        learnSkill(new rpg.model.skill.IronGuard(15));
+        learnSkill(new IronGuard(15));
     }
 
     @Override

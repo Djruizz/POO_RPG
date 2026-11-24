@@ -1,17 +1,21 @@
 package rpg.engine;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 import rpg.exception.GameException;
 import rpg.exception.InvalidActionException;
 import rpg.exception.InventoryFullException;
 import rpg.exception.ItemNotFoundException;
 import rpg.exception.PersistenceException;
+import rpg.model.combat.ActiveStatusEffect;
 import rpg.model.combat.Combatant;
 import rpg.model.combat.SkillResult;
 import rpg.model.dungeon.DungeonFloor;
 import rpg.model.dungeon.GameState;
 import rpg.model.dungeon.Room;
+import rpg.model.entity.Boss;
 import rpg.model.entity.Enemy;
 import rpg.model.entity.Mage;
 import rpg.model.entity.Player;
@@ -21,13 +25,17 @@ import rpg.model.enums.Direction;
 import rpg.model.enums.EquipmentSlot;
 import rpg.model.enums.ItemType;
 import rpg.model.enums.RoomType;
+import rpg.model.enums.StatusEffectType;
 import rpg.model.item.Equippable;
 import rpg.model.item.Item;
+import rpg.model.lore.FloorTheme;
+import rpg.model.lore.LoreFragment;
 import rpg.model.skill.Skill;
 import rpg.persistence.GameRepository;
 import rpg.service.CombatService;
 import rpg.service.DungeonGenerator;
 import rpg.service.ItemFactory;
+import rpg.ui.AnsiColor;
 import rpg.ui.ConsoleReader;
 import rpg.ui.ConsoleView;
 
@@ -98,7 +106,8 @@ public final class GameEngine {
         DungeonFloor firstFloor = dungeonGenerator.generateFloor(1);
         GameState gameState = new GameState(player, firstFloor);
 
-        view.printSuccess("¡La expedición de " + player.getName() + " comienza en las catacumbas!");
+        view.printSuccess("¡La expedición de " + player.getName() + " comienza!");
+        view.printFloorArrival(firstFloor.getFloorNumber());
         reader.waitForEnter();
         runExplorationLoop(gameState);
     }
@@ -136,7 +145,7 @@ public final class GameEngine {
 
         while (inGame && gameState.getPlayer().isAlive() && !gameState.isVictory()) {
             view.printExplorationScreen(gameState);
-            int action = reader.readIntInRange("Acción", 1, 6);
+            int action = reader.readIntInRange("Acción", 1, 7);
 
             try {
                 switch (action) {
@@ -146,9 +155,13 @@ public final class GameEngine {
                         view.printCharacterSheet(gameState.getPlayer());
                         reader.waitForEnter();
                     }
-                    case 4 -> handleSortInventory(gameState.getPlayer());
-                    case 5 -> handleSaveGame(gameState);
-                    case 6 -> {
+                    case 4 -> {
+                        view.printCodex(gameState.getDiscoveredLore());
+                        reader.waitForEnter();
+                    }
+                    case 5 -> handleSortInventory(gameState.getPlayer());
+                    case 6 -> handleSaveGame(gameState);
+                    case 7 -> {
                         if (reader.readYesNo("¿Deseas volver al menú principal? (Asegúrate de haber guardado)")) {
                             inGame = false;
                         }
@@ -201,7 +214,10 @@ public final class GameEngine {
                 Enemy enemy = room.getEnemy();
                 if (enemy != null && enemy.isAlive()) {
                     if (room.getType() == RoomType.BOSS) {
-                        view.printWarning("¡ADVERTENCIA! Has entrado en los aposentos del " + enemy.getName() + ".");
+                        view.printWarning("¡ADVERTENCIA! Te cierra el paso " + enemy.getName() + ".");
+                        if (enemy instanceof Boss boss && boss.getIntroLine() != null) {
+                            view.printDialogue(boss.getName(), boss.getIntroLine());
+                        }
                     } else {
                         view.printWarning("¡Una sombra se abalanza desde la oscuridad! Encuentro hostil: " + enemy.getName());
                     }
@@ -211,6 +227,10 @@ public final class GameEngine {
 
                     if (gameState.getPlayer().isAlive() && !enemy.isAlive()) {
                         room.markCleared();
+                        if (enemy instanceof Boss boss && boss.getDeathLine() != null) {
+                            view.printDialogue(boss.getName(), boss.getDeathLine());
+                            reader.waitForEnter();
+                        }
                         if (enemy.isBoss()) {
                             int currentFloorNum = gameState.getCurrentFloor().getFloorNumber();
                             if (currentFloorNum >= gameState.getMaxFloors()) {
@@ -220,6 +240,8 @@ public final class GameEngine {
                                 reader.waitForEnter();
                                 DungeonFloor nextFloor = dungeonGenerator.generateFloor(currentFloorNum + 1);
                                 gameState.advanceFloor(nextFloor);
+                                view.printFloorArrival(nextFloor.getFloorNumber());
+                                reader.waitForEnter();
                             }
                         }
                     }
@@ -252,8 +274,22 @@ public final class GameEngine {
             case SHOP -> {
                 handleMerchantShop(gameState.getPlayer(), gameState.getCurrentFloor().getFloorNumber());
             }
+            case INSCRIPTION -> {
+                LoreFragment fragment = room.getLoreFragment();
+                if (fragment != null) {
+                    System.out.println("\nEntre el polvo distingues palabras dejadas por quienes estuvieron aquí antes.");
+                    view.printLoreFragment(fragment);
+                    if (gameState.discoverLore(fragment)) {
+                        view.printSuccess("Fragmento añadido al códice ("
+                                + gameState.getDiscoveredLore().size() + "/" + LoreFragment.totalCount() + ").");
+                    }
+                }
+                room.markCleared();
+                reader.waitForEnter();
+            }
             case EMPTY, ENTRANCE -> {
-                System.out.println("\nUn pasillo silencioso y frío. No hay peligros inmediatos.");
+                System.out.println();
+                view.printNarration(FloorTheme.forFloor(gameState.getCurrentFloor().getFloorNumber()).randomAmbientLine());
                 room.markCleared();
                 reader.waitForEnter();
             }
@@ -322,15 +358,15 @@ public final class GameEngine {
                             turnActionFinished = true;
                         } else if (combatChoice == 3) {
                             int guardDef = 8 + (player.getLevel() * 3);
-                            player.applyStatusEffect(new rpg.model.combat.ActiveStatusEffect(
-                                    rpg.model.enums.StatusEffectType.FORTIFY, 1, guardDef));
+                            player.applyStatusEffect(new ActiveStatusEffect(
+                                    StatusEffectType.FORTIFY, 1, guardDef));
                             view.printSuccess("¡Adoptas una guardia defensiva férrea! (+ " + guardDef + " DEF durante esta ronda).");
                             turnActionFinished = true;
                         } else if (combatChoice == 4) {
                             if (enemy.isBoss()) {
                                 throw new InvalidActionException("¡Barreras místicas sellan las salidas! No puedes huir de un Jefe.");
                             }
-                            double fleeRoll = java.util.concurrent.ThreadLocalRandom.current().nextDouble();
+                            double fleeRoll = ThreadLocalRandom.current().nextDouble();
                             if (fleeRoll < 0.65) {
                                 view.printSuccess("¡Aprovechas una distracción del rival y logras escapar del combate!");
                                 return; // Sale del combate sin matar al enemigo
@@ -359,7 +395,14 @@ public final class GameEngine {
             if (enemy.isStunned()) {
                 view.printWarning(enemy.getName() + " está aturdido y pierde su acción.");
             } else {
+                boolean wasEnraged = enemy instanceof Boss b && b.isEnraged();
                 Skill enemySkill = enemy.chooseSkill(player);
+                if (!wasEnraged && enemy instanceof Boss boss && boss.isEnraged()) {
+                    view.printWarning(boss.getName() + " entra en furia.");
+                    if (boss.getEnrageLine() != null) {
+                        view.printDialogue(boss.getName(), boss.getEnrageLine());
+                    }
+                }
                 Combatant enemyTarget = enemySkill.isSelfTargeted() ? enemy : player;
                 try {
                     SkillResult enemyResult = combatService.executeSkillAction(enemy, enemySkill, enemyTarget);
@@ -387,7 +430,7 @@ public final class GameEngine {
             view.printEquipment(player.getEquippedItems());
             view.printInventory(player.getInventory());
 
-            System.out.println(rpg.ui.AnsiColor.CYAN.boldWrap("\nOpciones de Mochila y Equipo:"));
+            System.out.println(AnsiColor.CYAN.boldWrap("\nOpciones de Mochila y Equipo:"));
             System.out.println(" 1. Usar Objeto Consumible");
             System.out.println(" 2. Equipar Objeto");
             System.out.println(" 3. Desequipar Ranura");
@@ -468,11 +511,11 @@ public final class GameEngine {
                 view.printSuccess("Mochila ordenada según orden natural (Comparable).");
             }
             case 2 -> {
-                player.getInventory().sortWith(java.util.Comparator.comparingInt(Item::getGoldValue).reversed());
+                player.getInventory().sortWith(Comparator.comparingInt(Item::getGoldValue).reversed());
                 view.printSuccess("Mochila ordenada por valor en oro.");
             }
             case 3 -> {
-                player.getInventory().sortWith(java.util.Comparator.comparing(Item::getName, String.CASE_INSENSITIVE_ORDER));
+                player.getInventory().sortWith(Comparator.comparing(Item::getName, String.CASE_INSENSITIVE_ORDER));
                 view.printSuccess("Mochila ordenada alfabéticamente por nombre.");
             }
         }
@@ -480,14 +523,14 @@ public final class GameEngine {
     }
 
     private void handleMerchantShop(Player player, int floor) {
-        System.out.println(rpg.ui.AnsiColor.BRIGHT_BLUE.boldWrap(
+        System.out.println(AnsiColor.BRIGHT_BLUE.boldWrap(
                 "\n==================== [ PUESTO DEL MERCADER AMBULANTE ] ===================="));
         System.out.println(" \"¡Saludos valiente explorador! Si tienes el oro suficiente, tengo equipo y elixires selectos...\"");
 
         boolean shopping = true;
         while (shopping) {
             System.out.printf("%n Tu bolsa de monedas: %s💰 | Capacidad mochila: %d/%d ranuras%n",
-                    rpg.ui.AnsiColor.BRIGHT_YELLOW.boldWrap(String.valueOf(player.getGold())),
+                    AnsiColor.BRIGHT_YELLOW.boldWrap(String.valueOf(player.getGold())),
                     player.getInventory().size(),
                     player.getInventory().getMaxCapacity());
 

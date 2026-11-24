@@ -6,6 +6,7 @@ import rpg.exception.InvalidActionException;
 import rpg.model.combat.EnergyUser;
 import rpg.model.skill.Backstab;
 import rpg.model.skill.BasicAttack;
+import rpg.model.skill.PoisonStrike;
 
 /**
  * Especialización de héroe: Pícaro Sombrío.
@@ -25,7 +26,7 @@ public final class Rogue extends Player implements EnergyUser {
         this.baseCritChance = 0.25;
         learnSkill(new BasicAttack());
         learnSkill(new Backstab(35));
-        learnSkill(new rpg.model.skill.PoisonStrike(25));
+        learnSkill(new PoisonStrike(25));
     }
 
     @Override
